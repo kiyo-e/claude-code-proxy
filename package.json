@@ -1,0 +1,21 @@
+{
+  "name": "claude_code_proxy",
+  "module": "index.ts",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev src/index.ts",
+    "start": "bun run --hot src/index.ts",
+    "deploy": "wrangler deploy --minify src/index.ts"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20250601.0",
+    "bun-types": "latest",
+    "wrangler": "^4.18.0"
+  },
+  "peerDependencies": {
+    "typescript": "^5.0.0"
+  },
+  "dependencies": {
+    "hono": "^4.7.11"
+  }
+}

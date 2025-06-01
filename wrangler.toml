@@ -1,0 +1,8 @@
+name = "claude-code-proxy"
+main = "./index.ts"
+compatibility_date = "2025-05-30"
+
+[vars]
+# DEBUG = "true"
+# REASONING_MODEL = "deepseek/deepseek-r1-0528:free"
+# COMPLETION_MODEL = "deepseek/deepseek-r1-0528:free"

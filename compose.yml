@@ -1,0 +1,14 @@
+services:
+  claude-code-proxy:
+    build: .
+    ports:
+      - "3000:3000"
+    volumes:
+      - .:/app
+      - /app/node_modules
+    environment:
+      - API_KEY=${API_KEY}
+      - DEBUG=${DEBUG:-false}
+      - COMPLETION_MODEL=${COMPLETION_MODEL:-openai/gpt-4.1}
+      - REASONING_MODEL=${REASONING_MODEL:-openai/gpt-4.1}
+      - ANTHROPIC_PROXY_BASE_URL=${ANTHROPIC_PROXY_BASE_URL:-https://models.github.ai/inference}
