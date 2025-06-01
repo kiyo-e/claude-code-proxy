@@ -1,0 +1,21 @@
+# Development files
+.dev.vars.example
+.env.example
+.dev.vars
+.env
+.claude/
+
+# Build/deployment files
+.github/
+Dockerfile
+compose.yml
+wrangler.toml
+
+# Documentation (optional - remove if you want to include)
+CLAUDE.md
+
+# TypeScript config (users will have their own)
+tsconfig.json
+
+# Source files (users only need the built version)
+src/

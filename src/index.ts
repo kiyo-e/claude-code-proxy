@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 import { Hono } from 'hono'
 import { env } from 'hono/adapter'
+import * as process from 'node:process';
 
 const app = new Hono<{
   Bindings: {
@@ -12,35 +13,22 @@ const app = new Hono<{
   }
 }>()
 
+
+const defaultModel = 'openai/gpt-4.1'
+const port = parseInt(process.env.PORT || '8787', 10)
+
 // Health check endpoint
 app.get('/', (c) => {
   return c.json({ status: 'ok', message: 'Claude Code Proxy is running' })
 })
-
-// Helper function to send SSE events
-const sendSSE = (writer: WritableStreamDefaultWriter, event: string, data: any) => {
-  const sseMessage = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`
-  writer.write(new TextEncoder().encode(sseMessage))
-}
-
-function mapStopReason(finishReason: string): string {
-  switch (finishReason) {
-    case 'tool_calls': return 'tool_use'
-    case 'stop': return 'end_turn'
-    case 'length': return 'max_tokens'
-    default: return 'end_turn'
-  }
-}
 
 app.post('/v1/messages', async (c) => {
   // Get environment variables from context
   const { CLAUDE_CODE_PROXY_API_KEY, ANTHROPIC_PROXY_BASE_URL, REASONING_MODEL, COMPLETION_MODEL, DEBUG } = env(c)
 
   try {
-
     const baseUrl = ANTHROPIC_PROXY_BASE_URL || 'https://models.github.ai/inference'
     const key = CLAUDE_CODE_PROXY_API_KEY || null
-    const defaultModel = 'openai/gpt-4.1'
     const models = {
       reasoning: REASONING_MODEL || defaultModel,
       completion: COMPLETION_MODEL || defaultModel,
@@ -450,9 +438,19 @@ app.post('/v1/messages', async (c) => {
   }
 })
 
-console.log(`Listening on http://localhost:8787`);
+
+function mapStopReason(finishReason: string): string {
+  switch (finishReason) {
+    case 'tool_calls': return 'tool_use'
+    case 'stop': return 'end_turn'
+    case 'length': return 'max_tokens'
+    default: return 'end_turn'
+  }
+}
+
+console.log(`Listening on http://localhost:${port}`);
 
 export default {
-  port: 8787,
+  port: port,
   fetch: app.fetch,
 }

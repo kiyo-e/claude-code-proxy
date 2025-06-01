@@ -1,9 +1,13 @@
 {
-  "name": "claude_code_proxy",
-  "module": "index.ts",
+  "name": "@kiyo-e/claude_code_proxy",
+  "version": "0.1.0",
+  "module": "dist/cli.js",
   "type": "module",
   "bin": {
-    "claude-code-proxy": "./src/index.ts"
+    "claude-code-proxy": "./dist/cli.js"
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
   },
   "scripts": {
     "dev": "wrangler dev src/index.ts",

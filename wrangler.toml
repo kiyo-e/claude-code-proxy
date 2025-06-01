@@ -1,6 +1,7 @@
 name = "claude-code-proxy"
 main = "./index.ts"
 compatibility_date = "2025-05-30"
+compatibility_flags = ["nodejs_compat"]
 
 [vars]
 # DEBUG = "true"
