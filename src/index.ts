@@ -1,4 +1,3 @@
-#!/usr/bin/env bun
 import { Hono } from 'hono'
 import { env } from 'hono/adapter'
 import * as process from 'node:process';

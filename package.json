@@ -1,20 +1,21 @@
 {
   "name": "@kiyo-e/claude_code_proxy",
-  "version": "0.1.0",
-  "module": "dist/cli.js",
+  "version": "0.1.1",
   "type": "module",
-  "bin": {
-    "claude-code-proxy": "./dist/cli.js"
-  },
+  "bin": "./bin",
+  "files": [
+    "bin"
+  ],
   "publishConfig": {
     "registry": "https://npm.pkg.github.com"
   },
   "scripts": {
+    "bin": "./bin",
     "dev": "wrangler dev src/index.ts",
     "start": "bun run --hot src/index.ts",
     "deploy": "wrangler deploy --minify src/index.ts",
-    "build": "bun build src/index.ts --outfile dist/cli.js --target=node --minify",
-    "prepublishOnly": "bun run build"
+    "build": "bun build ./src/index.ts --outfile=./bin --target=node --format=esm --banner='#!/usr/bin/env node'",
+    "prepack": "bun run build"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20250601.0",
