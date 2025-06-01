@@ -13,7 +13,7 @@
     "dev": "wrangler dev src/index.ts",
     "start": "bun run --hot src/index.ts",
     "deploy": "wrangler deploy --minify src/index.ts",
-    "build": "bun build src/index.ts --outfile dist/cli.js --target=bun --minify",
+    "build": "bun build src/index.ts --outfile dist/cli.js --target=node --minify",
     "prepublishOnly": "bun run build"
   },
   "devDependencies": {
