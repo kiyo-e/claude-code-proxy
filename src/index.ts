@@ -1,10 +1,11 @@
+#!/usr/bin/env bun
 import { Hono } from 'hono'
 import { env } from 'hono/adapter'
 
 const app = new Hono<{
   Bindings: {
     ANTHROPIC_PROXY_BASE_URL?: string
-    API_KEY?: string
+    CLAUDE_CODE_PROXY_API_KEY?: string
     REASONING_MODEL?: string
     COMPLETION_MODEL?: string
     DEBUG?: string
@@ -33,12 +34,12 @@ function mapStopReason(finishReason: string): string {
 
 app.post('/v1/messages', async (c) => {
   // Get environment variables from context
-  const { API_KEY, ANTHROPIC_PROXY_BASE_URL, REASONING_MODEL, COMPLETION_MODEL, DEBUG } = env(c)
+  const { CLAUDE_CODE_PROXY_API_KEY, ANTHROPIC_PROXY_BASE_URL, REASONING_MODEL, COMPLETION_MODEL, DEBUG } = env(c)
 
   try {
 
     const baseUrl = ANTHROPIC_PROXY_BASE_URL || 'https://models.github.ai/inference'
-    const key = API_KEY || null
+    const key = CLAUDE_CODE_PROXY_API_KEY || null
     const defaultModel = 'openai/gpt-4.1'
     const models = {
       reasoning: REASONING_MODEL || defaultModel,
@@ -167,7 +168,7 @@ app.post('/v1/messages', async (c) => {
     if (tools.length > 0) openaiPayload.tools = tools
     debug('OpenAI payload:', openaiPayload)
 
-    const headers: HeadersInit = {
+    const headers: Record<string, string> = {
       'Content-Type': 'application/json'
     }
 
@@ -208,7 +209,7 @@ app.post('/v1/messages', async (c) => {
       // Create a message id
       const messageId = data.id
         ? data.id.replace('chatcmpl', 'msg')
-        : 'msg_' + Math.random().toString(36).substr(2, 24)
+        : 'msg_' + Math.random().toString(36).substring(2, 26)
 
       const anthropicResponse = {
         content: [
@@ -253,7 +254,7 @@ app.post('/v1/messages', async (c) => {
         }
 
         let isSucceeded = false
-        const messageId = 'msg_' + Math.random().toString(36).substr(2, 24)
+        const messageId = 'msg_' + Math.random().toString(36).substring(2, 26)
 
         const sendSuccessMessage = () => {
           if (isSucceeded) return
@@ -449,4 +450,9 @@ app.post('/v1/messages', async (c) => {
   }
 })
 
-export default app
+console.log(`Listening on http://localhost:8787`);
+
+export default {
+  port: 8787,
+  fetch: app.fetch,
+}

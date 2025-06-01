@@ -2,10 +2,14 @@
   "name": "claude_code_proxy",
   "module": "index.ts",
   "type": "module",
+  "bin": {
+    "claude-code-proxy": "./src/index.ts"
+  },
   "scripts": {
     "dev": "wrangler dev src/index.ts",
     "start": "bun run --hot src/index.ts",
-    "deploy": "wrangler deploy --minify src/index.ts"
+    "deploy": "wrangler deploy --minify src/index.ts",
+    "build": "bun build src/index.ts --outfile dist/cli.js --target=bun --minify"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20250601.0",

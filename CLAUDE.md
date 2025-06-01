@@ -11,7 +11,7 @@ This is a Claude Code proxy service that translates between Anthropic's Claude A
 The proxy service handles:
 - API format translation between Claude and OpenAI formats
 - Message content normalization and tool call mapping
-- Streaming and non-streaming response handling 
+- Streaming and non-streaming response handling
 - JSON schema transformation (removes `format: 'uri'` constraints)
 - SSE (Server-Sent Events) for streaming responses
 
@@ -29,15 +29,15 @@ bun run start
 # Cloudflare Workers development
 bun run dev
 
-# Deploy to Cloudflare Workers  
+# Deploy to Cloudflare Workers
 bun run deploy
 ```
 
 ## Environment Variables
 
 Configure via `wrangler.toml` or environment:
-- `API_KEY` - Bearer token for upstream API
-- `ANTHROPIC_PROXY_BASE_URL` - Upstream API URL (default: https://models.github.ai/inference)  
+- `CLAUDE_CODE_PROXY_API_KEY` - Bearer token for upstream API
+- `ANTHROPIC_PROXY_BASE_URL` - Upstream API URL (default: https://models.github.ai/inference)
 - `REASONING_MODEL` - Model for reasoning requests (default: openai/gpt-4.1)
 - `COMPLETION_MODEL` - Model for completion requests (default: openai/gpt-4.1)
 - `DEBUG` - Enable debug logging (default: false)
@@ -47,15 +47,15 @@ Configure via `wrangler.toml` or environment:
 ### Cloudflare Workers
 Uses `wrangler.toml` configuration and `bun run deploy`
 
-### Docker/Compose  
-Uses `Dockerfile` and `compose.yml` for containerized deployment on port 3000
+### Docker/Compose
+Uses `Dockerfile` and `compose.yml` for containerized deployment on port 8787
 
 ## GitHub Actions Integration
 
 This proxy can be used with Claude Code GitHub Actions via `.github/workflows/claude.yml`. The workflow:
 - Triggers on `@claude` mentions in issues, PRs, and comments
-- Runs the proxy as a service container on port 3000 
-- Uses `anthropics/claude-code-action@beta` with `ANTHROPIC_BASE_URL: http://localhost:3000`
+- Runs the proxy as a service container on port 8787
+- Uses `anthropics/claude-code-action@beta` with `ANTHROPIC_BASE_URL: http://localhost:8787`
 
 ## Local Usage with Claude Code
 
@@ -72,14 +72,14 @@ ANTHROPIC_BASE_URL=http://localhost:8787 claude
 ```bash
 # Build and run with Docker
 docker build -t claude-code-proxy .
-docker run -d -p 3000:3000 claude-code-proxy
+docker run -d -p 8787:8787 claude-code-proxy
 
 # Verify the proxy is running
-curl http://localhost:3000
+curl http://localhost:8787
 
 # Use with Claude Code
-ANTHROPIC_BASE_URL=http://localhost:3000 claude
+ANTHROPIC_BASE_URL=http://localhost:8787 claude
 
 # Example usage
-ANTHROPIC_BASE_URL=http://localhost:3000 claude "Review the API code and suggest improvements"
+ANTHROPIC_BASE_URL=http://localhost:8787 claude "Review the API code and suggest improvements"
 ```
