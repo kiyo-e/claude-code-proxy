@@ -31,10 +31,10 @@ ANTHROPIC_BASE_URL=http://localhost:3000 claude "Help me review this code"
 
 ```bash
 # GitHub Models (default)
-docker run -d -p 8787:8787 -e CLAUDE_CODE_PROXY_API_KEY=your_github_token ghcr.io/kiyo-e/claude-code-proxy:latest
+docker run -d -p 3000:3000 -e CLAUDE_CODE_PROXY_API_KEY=your_github_token ghcr.io/kiyo-e/claude-code-proxy:latest
 
 # OpenRouter
-docker run -d -p 8787:8787 \
+docker run -d -p 3000:3000 \
   -e CLAUDE_CODE_PROXY_API_KEY=your_openrouter_key \
   -e ANTHROPIC_PROXY_BASE_URL=https://openrouter.ai/api/v1 \
   -e REASONING_MODEL=deepseek/deepseek-r1-0528:free \
@@ -42,7 +42,7 @@ docker run -d -p 8787:8787 \
   ghcr.io/kiyo-e/claude-code-proxy:latest
 
 # Use with Claude Code
-ANTHROPIC_BASE_URL=http://localhost:8787 claude "Help me review this code"
+ANTHROPIC_BASE_URL=http://localhost:3000 claude "Help me review this code"
 ```
 
 ### Environment File Configuration
@@ -58,7 +58,7 @@ DEBUG=false
 EOF
 
 # Run with env file
-docker run -d -p 8787:8787 --env-file .env ghcr.io/kiyo-e/claude-code-proxy:latest
+docker run -d -p 3000:3000 --env-file .env ghcr.io/kiyo-e/claude-code-proxy:latest
 ```
 
 ## Development
@@ -135,7 +135,7 @@ jobs:
       claude-code-proxy:
         image: ghcr.io/kiyo-e/claude-code-proxy:latest
         ports:
-          - 8787:8787
+          - 3000:3000
         env:
           CLAUDE_CODE_PROXY_API_KEY: ${{ secrets.GITHUB_TOKEN }}
     steps:
@@ -145,7 +145,7 @@ jobs:
         with:
           anthropic_api_key: ${{ secrets.GITHUB_TOKEN }}
         env:
-          ANTHROPIC_BASE_URL: http://localhost:8787
+          ANTHROPIC_BASE_URL: http://localhost:3000
 ```
 
 ## API Endpoints

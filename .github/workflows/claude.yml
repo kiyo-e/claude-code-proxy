@@ -28,11 +28,11 @@ jobs:
       claude-code-proxy:
         image: ghcr.io/kiyo-e/claude-code-proxy:latest
         ports:
-          - 8787:8787
+          - 3000:3000
         env:
           CLAUDE_CODE_PROXY_API_KEY: ${{ secrets.GITHUB_TOKEN }}
         options: >-
-          --health-cmd "curl -f http://localhost:8787/ || exit 1"
+          --health-cmd "curl -f http://localhost:3000/ || exit 1"
           --health-interval 30s
           --health-timeout 10s
           --health-retries 3
@@ -48,4 +48,4 @@ jobs:
           anthropic_api_key: ${{ secrets.GITHUB_TOKEN }}
           timeout_minutes: "60"
         env:
-          ANTHROPIC_BASE_URL: http://localhost:8787
+          ANTHROPIC_BASE_URL: http://localhost:3000

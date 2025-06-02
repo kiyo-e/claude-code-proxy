@@ -72,7 +72,7 @@ bun run deploy
 Multi-stage build with production optimization:
 ```bash
 docker build -t claude-code-proxy .
-docker run -d -p 8787:8787 claude-code-proxy
+docker run -d -p 3000:3000 claude-code-proxy
 ```
 
 ### NPM Package
@@ -89,7 +89,7 @@ Service container setup for `@claude` mentions:
 services:
   claude-code-proxy:
     image: ghcr.io/kiyo-e/claude-code-proxy:latest
-    ports: [8787:8787]
+    ports: [3000:3000]
     env:
       CLAUDE_CODE_PROXY_API_KEY: ${{ secrets.GITHUB_TOKEN }}
 ```
@@ -108,10 +108,10 @@ ANTHROPIC_BASE_URL=http://localhost:3000 claude
 ### Docker Usage
 ```bash
 # Quick start with GitHub token
-docker run -d -p 8787:8787 -e CLAUDE_CODE_PROXY_API_KEY=your_token ghcr.io/kiyo-e/claude-code-proxy:latest
+docker run -d -p 3000:3000 -e CLAUDE_CODE_PROXY_API_KEY=your_token ghcr.io/kiyo-e/claude-code-proxy:latest
 
 # Use with Claude Code
-ANTHROPIC_BASE_URL=http://localhost:8787 claude "Review the API code and suggest improvements"
+ANTHROPIC_BASE_URL=http://localhost:3000 claude "Review the API code and suggest improvements"
 ```
 
 ### OpenRouter Configuration
@@ -119,5 +119,5 @@ ANTHROPIC_BASE_URL=http://localhost:8787 claude "Review the API code and suggest
 # Using environment file
 echo "ANTHROPIC_PROXY_BASE_URL=https://openrouter.ai/api/v1" > .env
 echo "REASONING_MODEL=deepseek/deepseek-r1-0528:free" >> .env
-docker run -d -p 8787:8787 --env-file .env ghcr.io/kiyo-e/claude-code-proxy:latest
+docker run -d -p 3000:3000 --env-file .env ghcr.io/kiyo-e/claude-code-proxy:latest
 ```

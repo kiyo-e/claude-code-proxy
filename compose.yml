@@ -2,7 +2,7 @@ services:
   claude-code-proxy:
     build: .
     ports:
-      - "8787:8787"
+      - "3000:3000"
     volumes:
       - .:/app
       - /app/node_modules
