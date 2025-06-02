@@ -45,7 +45,7 @@ jobs:
       - name: Run Claude PR Action
         uses: anthropics/claude-code-action@beta
         with:
-          anthropic_CLAUDE_CODE_PROXY_API_KEY: ${{ secrets.GITHUB_TOKEN }}
+          anthropic_api_key: ${{ secrets.GITHUB_TOKEN }}
           timeout_minutes: "60"
         env:
           ANTHROPIC_BASE_URL: http://localhost:8787

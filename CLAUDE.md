@@ -76,10 +76,10 @@ docker run -d -p 8787:8787 claude-code-proxy
 ```
 
 ### NPM Package
-Published as `@kiyo-e/claude_code_proxy` with CLI binary:
+Published as `@kiyo-e/claude-code-proxy` with CLI binary:
 ```bash
-npm install -g @kiyo-e/claude_code_proxy
-claude_code_proxy --help
+npm install -g @kiyo-e/claude-code-proxy
+claude-code-proxy --help
 ```
 
 ## GitHub Actions Integration

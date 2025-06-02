@@ -11,14 +11,14 @@ function getPackageVersion(): string {
   try {
     const __filename = fileURLToPath(import.meta.url);
     const __dirname = dirname(__filename);
-    
+
     // Try multiple possible paths for package.json
     const possiblePaths = [
       join(__dirname, '..', 'package.json'),  // Development
       join(__dirname, 'package.json'),        // npm install
       join(__dirname, '..', '..', 'package.json')  // Other scenarios
     ];
-    
+
     for (const packagePath of possiblePaths) {
       try {
         const packageJson = JSON.parse(readFileSync(packagePath, 'utf8'));
@@ -27,7 +27,7 @@ function getPackageVersion(): string {
         continue;
       }
     }
-    
+
     return 'unknown';
   } catch {
     return 'unknown';
@@ -38,7 +38,7 @@ function getPackageVersion(): string {
 function showHelp() {
   console.log(`Claude Code Proxy v${getPackageVersion()}
 
-Usage: claude_code_proxy [options]
+Usage: claude-code-proxy [options]
 
 Options:
   -v, --version    Show version number
@@ -47,16 +47,16 @@ Options:
 
 Environment Variables:
   PORT                      Server port (default: 3000)
-  CLAUDE_CODE_PROXY_API_KEY Bearer token for upstream API
+  claude-code-proxy_API_KEY Bearer token for upstream API
   ANTHROPIC_PROXY_BASE_URL  Upstream API URL (default: https://models.github.ai/inference)
   REASONING_MODEL           Model for reasoning requests (default: openai/gpt-4.1)
   COMPLETION_MODEL          Model for completion requests (default: openai/gpt-4.1)
   DEBUG                     Enable debug logging (default: false)
 
 Examples:
-  claude_code_proxy
-  claude_code_proxy --port 8080
-  PORT=8787 claude_code_proxy`);
+  claude-code-proxy
+  claude-code-proxy --port 8080
+  PORT=8787 claude-code-proxy`);
 }
 
 if (args.includes('-v') || args.includes('--version')) {

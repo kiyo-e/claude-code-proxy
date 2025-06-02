@@ -17,11 +17,11 @@ A proxy service that translates between Anthropic's Claude API format and OpenAI
 
 ```bash
 # Install globally
-npm install -g @kiyo-e/claude_code_proxy
+npm install -g @kiyo-e/claude-code-proxy
 
 # Run the proxy
-claude_code_proxy --help
-claude_code_proxy --port 8080
+claude-code-proxy --help
+claude-code-proxy --port 8080
 
 # Use with Claude Code
 ANTHROPIC_BASE_URL=http://localhost:3000 claude "Help me review this code"
@@ -107,7 +107,7 @@ npm publish
 ### CLI Options
 
 ```bash
-claude_code_proxy [options]
+claude-code-proxy [options]
 
 Options:
   -v, --version    Show version number
@@ -140,7 +140,10 @@ jobs:
           CLAUDE_CODE_PROXY_API_KEY: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v4
-      - uses: anthropics/claude-code-action@beta
+      - name: Run Claude PR Action
+        uses: anthropics/claude-code-action@beta
+        with:
+          anthropic_api_key: ${{ secrets.GITHUB_TOKEN }}
         env:
           ANTHROPIC_BASE_URL: http://localhost:8787
 ```

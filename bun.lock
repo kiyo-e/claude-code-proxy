@@ -2,7 +2,7 @@
   "lockfileVersion": 1,
   "workspaces": {
     "": {
-      "name": "@kiyo-e/claude_code_proxy",
+      "name": "@kiyo-e/claude-code-proxy",
       "dependencies": {
         "@hono/node-server": "^1.14.3",
         "hono": "^4.7.11",
