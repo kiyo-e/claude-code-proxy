@@ -14,7 +14,7 @@
     "dev": "wrangler dev src/index.ts",
     "start": "bun run --hot src/index.ts",
     "deploy": "wrangler deploy --minify src/index.ts",
-    "build": "bun build ./src/index.ts --outfile=./bin --target=node --format=esm --banner='#!/usr/bin/env node'",
+    "build": "bun build ./src/server.ts --outfile=./bin --target=node --format=esm --banner='#!/usr/bin/env node'",
     "prepack": "bun run build"
   },
   "devDependencies": {
@@ -26,6 +26,7 @@
     "typescript": "^5.0.0"
   },
   "dependencies": {
+    "@hono/node-server": "^1.14.3",
     "hono": "^4.7.11"
   }
 }

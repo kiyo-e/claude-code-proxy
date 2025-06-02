@@ -1,6 +1,5 @@
 import { Hono } from 'hono'
 import { env } from 'hono/adapter'
-import * as process from 'node:process';
 
 const app = new Hono<{
   Bindings: {
@@ -14,11 +13,20 @@ const app = new Hono<{
 
 
 const defaultModel = 'openai/gpt-4.1'
-const port = parseInt(process.env.PORT || '8787', 10)
 
 // Health check endpoint
 app.get('/', (c) => {
-  return c.json({ status: 'ok', message: 'Claude Code Proxy is running' })
+  const { ANTHROPIC_PROXY_BASE_URL, REASONING_MODEL, COMPLETION_MODEL} = env(c)
+
+  return c.json({
+    status: 'ok',
+    message: 'Claude Code Proxy is running',
+    config: {
+      ANTHROPIC_PROXY_BASE_URL,
+      REASONING_MODEL,
+      COMPLETION_MODEL
+    }
+  })
 })
 
 app.post('/v1/messages', async (c) => {
@@ -447,9 +455,4 @@ function mapStopReason(finishReason: string): string {
   }
 }
 
-console.log(`Listening on http://localhost:${port}`);
-
-export default {
-  port: port,
-  fetch: app.fetch,
-}
+export default app
