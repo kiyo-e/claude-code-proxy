@@ -2,7 +2,13 @@
   "name": "@kiyo-e/claude_code_proxy",
   "version": "0.1.1",
   "type": "module",
-  "bin": "./bin",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kiyo-e/claude_code_proxy.git"
+  },
+  "bin": {
+    "claude_code_proxy": "./bin"
+  },
   "files": [
     "bin"
   ],
