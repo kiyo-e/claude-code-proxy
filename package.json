@@ -1,19 +1,17 @@
 {
   "name": "@kiyo-e/claude_code_proxy",
-  "version": "0.1.1",
+  "version": "0.1.5",
   "type": "module",
   "repository": {
     "type": "git",
     "url": "https://github.com/kiyo-e/claude_code_proxy.git"
   },
-  "bin": {
-    "claude_code_proxy": "./bin"
-  },
+  "bin": "./bin",
   "files": [
     "bin"
   ],
   "publishConfig": {
-    "registry": "https://npm.pkg.github.com"
+    "access": "public"
   },
   "scripts": {
     "bin": "./bin",
@@ -21,7 +19,7 @@
     "start": "bun run --hot src/index.ts",
     "deploy": "wrangler deploy --minify src/index.ts",
     "build": "bun build ./src/server.ts --outfile=./bin --target=node --format=esm --banner='#!/usr/bin/env node'",
-    "prepack": "bun run build"
+    "prepack": "bun run build && chmod +x ./bin"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20250601.0",

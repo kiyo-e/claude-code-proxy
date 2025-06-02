@@ -4,18 +4,25 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is a Claude Code proxy service that translates between Anthropic's Claude API format and OpenAI-compatible API formats. Built with Hono framework on Bun runtime, it can be deployed to Cloudflare Workers or run locally.
+This is a Claude Code proxy service that translates between Anthropic's Claude API format and OpenAI-compatible API formats. Built with Hono framework on Bun runtime, it can be deployed to Cloudflare Workers, Docker, or as an npm package CLI.
 
 ## Architecture
 
-The proxy service handles:
-- API format translation between Claude and OpenAI formats
-- Message content normalization and tool call mapping
-- Streaming and non-streaming response handling
-- JSON schema transformation (removes `format: 'uri'` constraints)
-- SSE (Server-Sent Events) for streaming responses
+### Core Components
+- **`src/index.ts`** - Main Hono application with API proxy logic
+- **`src/server.ts`** - Node.js server wrapper for CLI distribution with argument parsing
 
-Core logic in `src/index.ts:34-450` handles the `/v1/messages` endpoint that performs the translation.
+### API Translation Logic
+The proxy service handles (in `src/index.ts:32-450`):
+- **Message normalization**: Converts Claude's nested content arrays to OpenAI's flat structure
+- **Tool call mapping**: Transforms Claude's `tool_use`/`tool_result` to OpenAI's `tool_calls`/`tool` roles
+- **Schema transformation**: Removes `format: 'uri'` constraints from JSON schemas for compatibility
+- **Model routing**: Dynamically selects models based on request type (reasoning vs completion)
+- **Streaming support**: Handles both streaming and non-streaming responses with SSE
+
+### Dual Runtime Support
+- **Cloudflare Workers**: Uses Hono's built-in fetch handler (`src/index.ts`)
+- **Node.js**: Uses `@hono/node-server` adapter (`src/server.ts`)
 
 ## Development Commands
 
@@ -23,15 +30,25 @@ Core logic in `src/index.ts:34-450` handles the `/v1/messages` endpoint that per
 # Install dependencies
 bun install
 
-# Local development (hot reload)
+# Local development server (hot reload)
 bun run start
 
 # Cloudflare Workers development
 bun run dev
 
+# Build CLI package
+bun run build
+
 # Deploy to Cloudflare Workers
 bun run deploy
 ```
+
+## CLI Package
+
+The project builds to an executable CLI via `bun run build`:
+- **Output**: `./bin` - Standalone Node.js executable
+- **Version management**: Reads from `package.json` dynamically
+- **CLI flags**: `-v/--version`, `--help`, `-p/--port`
 
 ## Environment Variables
 
@@ -41,45 +58,66 @@ Configure via `wrangler.toml` or environment:
 - `REASONING_MODEL` - Model for reasoning requests (default: openai/gpt-4.1)
 - `COMPLETION_MODEL` - Model for completion requests (default: openai/gpt-4.1)
 - `DEBUG` - Enable debug logging (default: false)
+- `PORT` - Server port for Node.js mode (default: 3000)
 
 ## Deployment Options
 
 ### Cloudflare Workers
-Uses `wrangler.toml` configuration and `bun run deploy`
+Uses `wrangler.toml` configuration:
+```bash
+bun run deploy
+```
 
-### Docker/Compose
-Uses `Dockerfile` and `compose.yml` for containerized deployment on port 8787
+### Docker
+Multi-stage build with production optimization:
+```bash
+docker build -t claude-code-proxy .
+docker run -d -p 8787:8787 claude-code-proxy
+```
+
+### NPM Package
+Published as `@kiyo-e/claude_code_proxy` with CLI binary:
+```bash
+npm install -g @kiyo-e/claude_code_proxy
+claude_code_proxy --help
+```
 
 ## GitHub Actions Integration
 
-This proxy can be used with Claude Code GitHub Actions via `.github/workflows/claude.yml`. The workflow:
-- Triggers on `@claude` mentions in issues, PRs, and comments
-- Runs the proxy as a service container on port 8787
-- Uses `anthropics/claude-code-action@beta` with `ANTHROPIC_BASE_URL: http://localhost:8787`
+Service container setup for `@claude` mentions:
+```yaml
+services:
+  claude-code-proxy:
+    image: ghcr.io/kiyo-e/claude-code-proxy:latest
+    ports: [8787:8787]
+    env:
+      CLAUDE_CODE_PROXY_API_KEY: ${{ secrets.GITHUB_TOKEN }}
+```
 
 ## Local Usage with Claude Code
 
 ### Development Server
 ```bash
-# Start the proxy
+# Start proxy (port 3000 by default)
 bun run start
 
-# In another terminal, use Claude Code with the proxy
-ANTHROPIC_BASE_URL=http://localhost:8787 claude
+# Use with Claude Code
+ANTHROPIC_BASE_URL=http://localhost:3000 claude
 ```
 
 ### Docker Usage
 ```bash
-# Build and run with Docker
-docker build -t claude-code-proxy .
-docker run -d -p 8787:8787 claude-code-proxy
-
-# Verify the proxy is running
-curl http://localhost:8787
+# Quick start with GitHub token
+docker run -d -p 8787:8787 -e CLAUDE_CODE_PROXY_API_KEY=your_token ghcr.io/kiyo-e/claude-code-proxy:latest
 
 # Use with Claude Code
-ANTHROPIC_BASE_URL=http://localhost:8787 claude
-
-# Example usage
 ANTHROPIC_BASE_URL=http://localhost:8787 claude "Review the API code and suggest improvements"
+```
+
+### OpenRouter Configuration
+```bash
+# Using environment file
+echo "ANTHROPIC_PROXY_BASE_URL=https://openrouter.ai/api/v1" > .env
+echo "REASONING_MODEL=deepseek/deepseek-r1-0528:free" >> .env
+docker run -d -p 8787:8787 --env-file .env ghcr.io/kiyo-e/claude-code-proxy:latest
 ```
