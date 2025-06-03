@@ -7,6 +7,8 @@ const app = new Hono<{
     CLAUDE_CODE_PROXY_API_KEY?: string
     REASONING_MODEL?: string
     COMPLETION_MODEL?: string
+    REASONING_MAX_TOKENS?: string
+    COMPLETION_MAX_TOKENS?: string
     DEBUG?: string
   }
 }>()
@@ -16,7 +18,7 @@ const defaultModel = 'openai/gpt-4.1'
 
 // Health check endpoint
 app.get('/', (c) => {
-  const { ANTHROPIC_PROXY_BASE_URL, REASONING_MODEL, COMPLETION_MODEL} = env(c)
+  const { ANTHROPIC_PROXY_BASE_URL, REASONING_MODEL, COMPLETION_MODEL, REASONING_MAX_TOKENS, COMPLETION_MAX_TOKENS} = env(c)
 
   return c.json({
     status: 'ok',
@@ -24,14 +26,16 @@ app.get('/', (c) => {
     config: {
       ANTHROPIC_PROXY_BASE_URL,
       REASONING_MODEL,
-      COMPLETION_MODEL
+      COMPLETION_MODEL,
+      REASONING_MAX_TOKENS,
+      COMPLETION_MAX_TOKENS
     }
   })
 })
 
 app.post('/v1/messages', async (c) => {
   // Get environment variables from context
-  const { CLAUDE_CODE_PROXY_API_KEY, ANTHROPIC_PROXY_BASE_URL, REASONING_MODEL, COMPLETION_MODEL, DEBUG } = env(c)
+  const { CLAUDE_CODE_PROXY_API_KEY, ANTHROPIC_PROXY_BASE_URL, REASONING_MODEL, COMPLETION_MODEL, REASONING_MAX_TOKENS, COMPLETION_MAX_TOKENS, DEBUG } = env(c)
 
   try {
     const baseUrl = ANTHROPIC_PROXY_BASE_URL || 'https://models.github.ai/inference'
@@ -159,6 +163,17 @@ app.post('/v1/messages', async (c) => {
       max_tokens: payload.max_tokens,
       temperature: payload.temperature !== undefined ? payload.temperature : 1,
       stream: payload.stream === true,
+    }
+
+    // Apply max_tokens override if configured
+    const selectedModel = payload.thinking ? models.reasoning : models.completion
+    const reasoningMaxTokens = REASONING_MAX_TOKENS ? parseInt(REASONING_MAX_TOKENS) : undefined
+    const completionMaxTokens = COMPLETION_MAX_TOKENS ? parseInt(COMPLETION_MAX_TOKENS) : undefined
+    
+    if (selectedModel === models.reasoning && reasoningMaxTokens) {
+      openaiPayload.max_tokens = reasoningMaxTokens
+    } else if (selectedModel === models.completion && completionMaxTokens) {
+      openaiPayload.max_tokens = completionMaxTokens
     }
     if (tools.length > 0) openaiPayload.tools = tools
     debug('OpenAI payload:', openaiPayload)
