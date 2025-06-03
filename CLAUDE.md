@@ -57,6 +57,8 @@ Configure via `wrangler.toml` or environment:
 - `ANTHROPIC_PROXY_BASE_URL` - Upstream API URL (default: https://models.github.ai/inference)
 - `REASONING_MODEL` - Model for reasoning requests (default: openai/gpt-4.1)
 - `COMPLETION_MODEL` - Model for completion requests (default: openai/gpt-4.1)
+- `REASONING_MAX_TOKENS` - Max tokens for reasoning model (optional)
+- `COMPLETION_MAX_TOKENS` - Max tokens for completion model (optional)
 - `DEBUG` - Enable debug logging (default: false)
 - `PORT` - Server port for Node.js mode (default: 3000)
 
