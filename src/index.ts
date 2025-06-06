@@ -78,16 +78,19 @@ app.post('/v1/messages', async (c) => {
     // Then add user (or other) messages
     if (payload.messages && Array.isArray(payload.messages)) {
       payload.messages.forEach((msg: any) => {
+        // Skip messages with unsupported roles for some APIs
+        if (!['user', 'assistant', 'system', 'tool', 'function'].includes(msg.role)) {
+          console.warn(`Skipping message with unsupported role: ${msg.role}`)
+          return
+        }
         const toolCalls = (Array.isArray(msg.content) ? msg.content : [])
           .filter((item: any) => item.type === 'tool_use')
           .map((toolCall: any) => ({
+            id: toolCall.id,
+            type: 'function',
             function: {
-              type: 'function',
-              id: toolCall.id,
-              function: {
-                name: toolCall.name,
-                parameters: toolCall.input,
-              },
+              name: toolCall.name,
+              arguments: JSON.stringify(toolCall.input),
             }
           }))
 
@@ -160,9 +163,13 @@ app.post('/v1/messages', async (c) => {
     const openaiPayload: any = {
       model: payload.thinking ? models.reasoning : models.completion,
       messages,
-      max_tokens: payload.max_tokens,
       temperature: payload.temperature !== undefined ? payload.temperature : 1,
       stream: payload.stream === true,
+    }
+    
+    // Only add max_tokens if it's provided and not null/undefined
+    if (payload.max_tokens !== null && payload.max_tokens !== undefined) {
+      openaiPayload.max_tokens = payload.max_tokens
     }
 
     // Apply max_tokens override if configured
@@ -176,6 +183,27 @@ app.post('/v1/messages', async (c) => {
       openaiPayload.max_tokens = completionMaxTokens
     }
     if (tools.length > 0) openaiPayload.tools = tools
+    
+    // Additional validation for Gemini compatibility
+    if (baseUrl.includes('gemini') || baseUrl.includes('google')) {
+      // Gemini-specific adjustments
+      if (openaiPayload.max_tokens === undefined) {
+        // Gemini might require max_tokens
+        openaiPayload.max_tokens = 4096
+      }
+      
+      // Log for debugging Gemini issues
+      console.log('Sending to Gemini-like API:', {
+        model: openaiPayload.model,
+        messageCount: openaiPayload.messages.length,
+        hasTools: !!openaiPayload.tools,
+        toolCount: openaiPayload.tools?.length || 0,
+        messageRoles: openaiPayload.messages.map((m: any) => m.role),
+        hasMaxTokens: !!openaiPayload.max_tokens,
+        temperature: openaiPayload.temperature
+      })
+    }
+    
     debug('OpenAI payload:', openaiPayload)
 
     const headers: Record<string, string> = {
@@ -198,6 +226,8 @@ app.post('/v1/messages', async (c) => {
 
     if (!openaiResponse.ok) {
       const errorDetails = await openaiResponse.text()
+      console.error(`OpenAI API error (${openaiResponse.status}):`, errorDetails)
+      console.error('Failed request payload:', JSON.stringify(openaiPayload, null, 2))
       return c.json({ error: errorDetails }, openaiResponse.status as any)
     }
 
@@ -299,6 +329,7 @@ app.post('/v1/messages', async (c) => {
         const decoder = new TextDecoder('utf-8')
         const reader = openaiResponse.body!.getReader()
         let done = false
+        let buffer = ''
 
         try {
           while (!done) {
@@ -307,7 +338,18 @@ app.post('/v1/messages', async (c) => {
             if (value) {
               const chunk = decoder.decode(value)
               debug('OpenAI response chunk:', chunk)
-              const lines = chunk.split('\n')
+              
+              // Append chunk to buffer to handle partial lines
+              buffer += chunk
+              const lines = buffer.split('\n')
+              
+              // Keep the last line in buffer if it doesn't end with newline
+              // (it might be incomplete)
+              if (!buffer.endsWith('\n')) {
+                buffer = lines.pop() || ''
+              } else {
+                buffer = ''
+              }
 
               for (const line of lines) {
                 const trimmed = line.trim()
@@ -436,6 +478,27 @@ app.post('/v1/messages', async (c) => {
                 } catch (e) {
                   // Skip invalid JSON lines
                   continue
+                }
+              }
+            }
+          }
+          
+          // Process any remaining buffer content
+          if (buffer.trim()) {
+            debug('Processing remaining buffer:', buffer)
+            const lines = buffer.split('\n')
+            for (const line of lines) {
+              const trimmed = line.trim()
+              if (trimmed && trimmed.startsWith('data:')) {
+                try {
+                  const dataStr = trimmed.replace(/^data:\s*/, '')
+                  if (dataStr !== '[DONE]') {
+                    const parsed = JSON.parse(dataStr)
+                    // Process the final chunk (same logic as above)
+                    debug('Final chunk data:', parsed)
+                  }
+                } catch (e) {
+                  debug('Failed to parse final buffer:', e)
                 }
               }
             }
