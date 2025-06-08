@@ -15,16 +15,35 @@ A proxy service that translates between Anthropic's Claude API format and OpenAI
 
 ### NPM Package (Recommended)
 
+#### Global Installation
 ```bash
 # Install globally
 npm install -g @kiyo-e/claude-code-proxy
 
-# Run the proxy
-claude-code-proxy --help
-claude-code-proxy --port 8080
+# Run on default port (3000)
+claude-code-proxy
 
-# Use with Claude Code
-ANTHROPIC_BASE_URL=http://localhost:3000 claude "Help me review this code"
+# Or specify a port
+claude-code-proxy --port 8080
+```
+
+#### On-demand Execution (npx/bunx)
+You can also run the proxy without installation:
+```bash
+# With npx on default port (3000)
+npx @kiyo-e/claude-code-proxy
+
+# With bunx on a specific port
+bunx @kiyo-e/claude-code-proxy --port 8080
+```
+
+#### Using with Claude Code
+```bash
+# Set the proxy URL (use the port you started the proxy on)
+export ANTHROPIC_BASE_URL=http://localhost:3000 
+
+# Use claude command
+claude "Help me review this code"
 ```
 
 ### Docker (Quick Start)
