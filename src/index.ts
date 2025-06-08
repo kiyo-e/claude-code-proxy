@@ -50,6 +50,10 @@ app.post('/v1/messages', async (c) => {
       console.log(...args)
     }
 
+    function maskBearer(value: string): string {
+      return value.replace(/Bearer\s+(\S+)/g, 'Bearer ********')
+    }
+
     const payload = await c.req.json()
 
     // Helper to normalize a message's content
@@ -195,7 +199,13 @@ app.post('/v1/messages', async (c) => {
     }
 
     debug('Using base URL:', baseUrl)
-    debug('Headers:', headers)
+    const maskedHeaders = Object.fromEntries(
+      Object.entries(headers).map(([key, value]) => [
+        key,
+        key.toLowerCase() === 'authorization' ? maskBearer(value) : value
+      ])
+    )
+    debug('Headers:', maskedHeaders)
     debug(`URL: ${baseUrl}/chat/completions`)
 
     const openaiResponse = await fetch(`${baseUrl}/chat/completions`, {
