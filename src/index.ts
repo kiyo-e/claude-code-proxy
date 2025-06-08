@@ -184,26 +184,6 @@ app.post('/v1/messages', async (c) => {
     }
     if (tools.length > 0) openaiPayload.tools = tools
     
-    // Additional validation for Gemini compatibility
-    if (baseUrl.includes('gemini') || baseUrl.includes('google')) {
-      // Gemini-specific adjustments
-      if (openaiPayload.max_tokens === undefined) {
-        // Gemini might require max_tokens
-        openaiPayload.max_tokens = 4096
-      }
-      
-      // Log for debugging Gemini issues
-      console.log('Sending to Gemini-like API:', {
-        model: openaiPayload.model,
-        messageCount: openaiPayload.messages.length,
-        hasTools: !!openaiPayload.tools,
-        toolCount: openaiPayload.tools?.length || 0,
-        messageRoles: openaiPayload.messages.map((m: any) => m.role),
-        hasMaxTokens: !!openaiPayload.max_tokens,
-        temperature: openaiPayload.temperature
-      })
-    }
-    
     debug('OpenAI payload:', openaiPayload)
 
     const headers: Record<string, string> = {
@@ -507,7 +487,11 @@ app.post('/v1/messages', async (c) => {
           console.error('Streaming error:', error)
           controller.error(error)
         } finally {
-          controller.close()
+          try {
+            controller.close()
+          } catch {
+            // Controller already closed, ignore
+          }
         }
       }
     }), {
