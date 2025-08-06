@@ -56,8 +56,9 @@ docker run -d -p 3000:3000 -e CLAUDE_CODE_PROXY_API_KEY=your_github_token ghcr.i
 docker run -d -p 3000:3000 \
   -e CLAUDE_CODE_PROXY_API_KEY=your_openrouter_key \
   -e ANTHROPIC_PROXY_BASE_URL=https://openrouter.ai/api/v1 \
-  -e REASONING_MODEL=deepseek/deepseek-r1-0528:free \
-  -e COMPLETION_MODEL=deepseek/deepseek-r1-0528:free \
+  -e REASONING_MODEL=z-ai/glm-4.5-air:free \
+  -e COMPLETION_MODEL=z-ai/glm-4.5-air:free \
+  -e REASONING_EFFORT=high \
   ghcr.io/kiyo-e/claude-code-proxy:latest
 
 # Use with Claude Code
@@ -71,10 +72,11 @@ ANTHROPIC_BASE_URL=http://localhost:3000 claude "Help me review this code"
 cat > .env << EOF
 CLAUDE_CODE_PROXY_API_KEY=your_api_key
 ANTHROPIC_PROXY_BASE_URL=https://openrouter.ai/api/v1
-REASONING_MODEL=deepseek/deepseek-r1-0528:free
-COMPLETION_MODEL=deepseek/deepseek-r1-0528:free
+REASONING_MODEL=z-ai/glm-4.5-air:free
+COMPLETION_MODEL=z-ai/glm-4.5-air:free
 REASONING_MAX_TOKENS=4096
 COMPLETION_MAX_TOKENS=2048
+REASONING_EFFORT=high
 DEBUG=false
 EOF
 
@@ -129,9 +131,9 @@ npx wrangler secret put CLAUDE_CODE_PROXY_API_KEY
 npx wrangler secret put ANTHROPIC_PROXY_BASE_URL
 # Enter: https://openrouter.ai/api/v1
 npx wrangler secret put REASONING_MODEL
-# Enter: deepseek/deepseek-r1-0528:free
+# Enter: z-ai/glm-4.5-air:free
 npx wrangler secret put COMPLETION_MODEL
-# Enter: deepseek/deepseek-r1-0528:free
+# Enter: z-ai/glm-4.5-air:free
 ```
 
 3. **Test the deployment:**
@@ -190,6 +192,7 @@ npm publish
 - `COMPLETION_MODEL` - Model for completion requests (default: openai/gpt-4.1)
 - `REASONING_MAX_TOKENS` - Max tokens for reasoning model (optional)
 - `COMPLETION_MAX_TOKENS` - Max tokens for completion model (optional)
+- `REASONING_EFFORT` - Reasoning effort level for reasoning model (optional, e.g., "low", "medium", "high")
 - `DEBUG` - Enable debug logging (default: false)
 - `PORT` - Server port for CLI mode (default: 3000)
 
@@ -203,8 +206,9 @@ npx wrangler secret put CLAUDE_CODE_PROXY_API_KEY
 npx wrangler secret put ANTHROPIC_PROXY_BASE_URL
 
 # Set regular environment variables
-npx wrangler env put REASONING_MODEL "deepseek/deepseek-r1-0528:free"
-npx wrangler env put COMPLETION_MODEL "deepseek/deepseek-r1-0528:free"
+npx wrangler env put REASONING_MODEL "z-ai/glm-4.5-air:free"
+npx wrangler env put COMPLETION_MODEL "z-ai/glm-4.5-air:free"
+npx wrangler env put REASONING_EFFORT "high"
 npx wrangler env put DEBUG "false"
 ```
 
@@ -212,8 +216,9 @@ Alternatively, configure via `wrangler.toml`:
 
 ```toml
 [env.production.vars]
-REASONING_MODEL = "deepseek/deepseek-r1-0528:free"
-COMPLETION_MODEL = "deepseek/deepseek-r1-0528:free"
+REASONING_MODEL = "z-ai/glm-4.5-air:free"
+COMPLETION_MODEL = "z-ai/glm-4.5-air:free"
+REASONING_EFFORT = "high"
 DEBUG = "false"
 ```
 

@@ -1,8 +1,10 @@
 import { Hono } from 'hono'
 import { env } from 'hono/adapter'
+import { transformOpenAIToClaude, transformClaudeToOpenAI, removeUriFormat } from './transform'
 
 const app = new Hono<{
   Bindings: {
+    REASONING_EFFORT?: string
     ANTHROPIC_PROXY_BASE_URL?: string
     CLAUDE_CODE_PROXY_API_KEY?: string
     REASONING_MODEL?: string
@@ -18,7 +20,7 @@ const defaultModel = 'openai/gpt-4.1'
 
 // Health check endpoint
 app.get('/', (c) => {
-  const { ANTHROPIC_PROXY_BASE_URL, REASONING_MODEL, COMPLETION_MODEL, REASONING_MAX_TOKENS, COMPLETION_MAX_TOKENS} = env(c)
+  const { ANTHROPIC_PROXY_BASE_URL, REASONING_MODEL, COMPLETION_MODEL, REASONING_MAX_TOKENS, COMPLETION_MAX_TOKENS, REASONING_EFFORT } = env(c)
 
   return c.json({
     status: 'ok',
@@ -28,14 +30,15 @@ app.get('/', (c) => {
       REASONING_MODEL,
       COMPLETION_MODEL,
       REASONING_MAX_TOKENS,
-      COMPLETION_MAX_TOKENS
+      COMPLETION_MAX_TOKENS,
+      REASONING_EFFORT
     }
   })
 })
 
 app.post('/v1/messages', async (c) => {
   // Get environment variables from context
-  const { CLAUDE_CODE_PROXY_API_KEY, ANTHROPIC_PROXY_BASE_URL, REASONING_MODEL, COMPLETION_MODEL, REASONING_MAX_TOKENS, COMPLETION_MAX_TOKENS, DEBUG } = env(c)
+  const { CLAUDE_CODE_PROXY_API_KEY, ANTHROPIC_PROXY_BASE_URL, REASONING_MODEL, COMPLETION_MODEL, REASONING_MAX_TOKENS, COMPLETION_MAX_TOKENS, DEBUG, REASONING_EFFORT } = env(c)
 
   try {
     const baseUrl = ANTHROPIC_PROXY_BASE_URL || 'https://models.github.ai/inference'
@@ -54,106 +57,75 @@ app.post('/v1/messages', async (c) => {
       return value.replace(/Bearer\s+(\S+)/g, 'Bearer ********')
     }
 
-    const payload = await c.req.json()
+    const claudePayload = await c.req.json()
+    
+    // Transform Claude format to OpenAI format
+    const { claudeRequest, droppedParams } = transformOpenAIToClaude(claudePayload)
 
-    // Helper to normalize a message's content
-    const normalizeContent = (content: any): string | null => {
-      if (typeof content === 'string') return content
-      if (Array.isArray(content)) {
-        return content.map(item => item.text).join(' ')
-      }
-      return null
-    }
-
-    // Build messages array for the OpenAI payload
+    // Convert messages from Claude to OpenAI format for upstream API
     const messages: any[] = []
-    if (payload.system && Array.isArray(payload.system)) {
-      payload.system.forEach((sysMsg: any) => {
-        const normalized = normalizeContent(sysMsg.text || sysMsg.content)
-        if (normalized) {
-          messages.push({
-            role: 'system',
-            content: normalized
-          })
-        }
+    
+    // Add system messages
+    if (claudeRequest.system) {
+      messages.push({
+        role: 'system',
+        content: claudeRequest.system
       })
     }
-
-    // Then add user (or other) messages
-    if (payload.messages && Array.isArray(payload.messages)) {
-      payload.messages.forEach((msg: any) => {
-        // Skip messages with unsupported roles for some APIs
-        if (!['user', 'assistant', 'system', 'tool', 'function'].includes(msg.role)) {
-          console.warn(`Skipping message with unsupported role: ${msg.role}`)
-          return
-        }
-        const toolCalls = (Array.isArray(msg.content) ? msg.content : [])
-          .filter((item: any) => item.type === 'tool_use')
-          .map((toolCall: any) => ({
-            id: toolCall.id,
-            type: 'function',
-            function: {
-              name: toolCall.name,
-              arguments: JSON.stringify(toolCall.input),
+    
+    // Process regular messages
+    if (claudeRequest.messages && Array.isArray(claudeRequest.messages)) {
+      for (const msg of claudeRequest.messages) {
+        if (msg.role === 'user' || msg.role === 'assistant') {
+          // Handle content blocks
+          if (Array.isArray(msg.content)) {
+            const textParts: string[] = []
+            const toolCalls: any[] = []
+            const toolResults: any[] = []
+            
+            for (const block of msg.content) {
+              if (block.type === 'text') {
+                textParts.push(block.text)
+              } else if (block.type === 'tool_use') {
+                toolCalls.push({
+                  id: block.id,
+                  type: 'function',
+                  function: {
+                    name: block.name,
+                    arguments: JSON.stringify(block.input)
+                  }
+                })
+              } else if (block.type === 'tool_result') {
+                toolResults.push({
+                  role: 'tool',
+                  content: block.content || '',
+                  tool_call_id: block.tool_use_id
+                })
+              }
             }
-          }))
-
-        const newMsg: any = { role: msg.role }
-        const normalized = normalizeContent(msg.content)
-        if (normalized) newMsg.content = normalized
-        if (toolCalls.length > 0) newMsg.tool_calls = toolCalls
-        if (newMsg.content || newMsg.tool_calls) messages.push(newMsg)
-
-        if (Array.isArray(msg.content)) {
-          const toolResults = msg.content.filter((item: any) => item.type === 'tool_result')
-          toolResults.forEach((toolResult: any) => {
+            
+            // Add main message if it has content
+            if (textParts.length > 0 || toolCalls.length > 0) {
+              const openAIMsg: any = { role: msg.role }
+              if (textParts.length > 0) openAIMsg.content = textParts.join(' ')
+              if (toolCalls.length > 0) openAIMsg.tool_calls = toolCalls
+              messages.push(openAIMsg)
+            }
+            
+            // Add tool result messages
+            messages.push(...toolResults)
+          } else if (typeof msg.content === 'string') {
             messages.push({
-              role: 'tool',
-              content: toolResult.text || toolResult.content,
-              tool_call_id: toolResult.tool_use_id,
+              role: msg.role,
+              content: msg.content
             })
-          })
-        }
-      })
-    }
-
-    // Helper function to recursively traverse JSON schema and remove format: 'uri'
-    const removeUriFormat = (schema: any): any => {
-      if (!schema || typeof schema !== 'object') return schema
-
-      // If this is a string type with uri format, remove the format
-      if (schema.type === 'string' && schema.format === 'uri') {
-        const { format, ...rest } = schema
-        return rest
-      }
-
-      // Handle array of schemas
-      if (Array.isArray(schema)) {
-        return schema.map(item => removeUriFormat(item))
-      }
-
-      // Recursively process all properties
-      const result: any = {}
-      for (const key in schema) {
-        if (key === 'properties' && typeof schema[key] === 'object') {
-          result[key] = {}
-          for (const propKey in schema[key]) {
-            result[key][propKey] = removeUriFormat(schema[key][propKey])
           }
-        } else if (key === 'items' && typeof schema[key] === 'object') {
-          result[key] = removeUriFormat(schema[key])
-        } else if (key === 'additionalProperties' && typeof schema[key] === 'object') {
-          result[key] = removeUriFormat(schema[key])
-        } else if (['anyOf', 'allOf', 'oneOf'].includes(key) && Array.isArray(schema[key])) {
-          result[key] = schema[key].map((item: any) => removeUriFormat(item))
-        } else {
-          result[key] = removeUriFormat(schema[key])
         }
       }
-      return result
     }
 
-    const tools = (payload.tools || [])
+    // Process tools
+    const tools = (claudeRequest.tools || [])
       .filter((tool: any) => !['BatchTool'].includes(tool.name))
       .map((tool: any) => ({
         type: 'function',
@@ -165,19 +137,21 @@ app.post('/v1/messages', async (c) => {
       }))
 
     const openaiPayload: any = {
-      model: payload.thinking ? models.reasoning : models.completion,
+      // Existing fields kept as before
+
+      model: claudePayload.thinking ? models.reasoning : models.completion,
       messages,
-      temperature: payload.temperature !== undefined ? payload.temperature : 1,
-      stream: payload.stream === true,
+      temperature: claudeRequest.temperature !== undefined ? claudeRequest.temperature : 1,
+      stream: claudeRequest.stream === true,
     }
     
     // Only add max_tokens if it's provided and not null/undefined
-    if (payload.max_tokens !== null && payload.max_tokens !== undefined) {
-      openaiPayload.max_tokens = payload.max_tokens
+    if (claudeRequest.max_tokens !== null && claudeRequest.max_tokens !== undefined) {
+      openaiPayload.max_tokens = claudeRequest.max_tokens
     }
 
     // Apply max_tokens override if configured
-    const selectedModel = payload.thinking ? models.reasoning : models.completion
+    const selectedModel = claudePayload.thinking ? models.reasoning : models.completion
     const reasoningMaxTokens = REASONING_MAX_TOKENS ? parseInt(REASONING_MAX_TOKENS) : undefined
     const completionMaxTokens = COMPLETION_MAX_TOKENS ? parseInt(COMPLETION_MAX_TOKENS) : undefined
     
@@ -186,9 +160,22 @@ app.post('/v1/messages', async (c) => {
     } else if (selectedModel === models.completion && completionMaxTokens) {
       openaiPayload.max_tokens = completionMaxTokens
     }
+    
+    // Apply reasoning_effort if configured and model is reasoning
+    if (selectedModel === models.reasoning && REASONING_EFFORT) {
+      openaiPayload.reasoning_effort = REASONING_EFFORT
+    }
+    // Add tool_choice if present
+    if (claudeRequest.tool_choice) {
+      const { type, name } = claudeRequest.tool_choice
+      openaiPayload.tool_choice = 
+        type === 'tool' && name ? { type: 'function', function: { name } } :
+        type === 'none' || type === 'auto' ? type : undefined
+    }
+    
     if (tools.length > 0) openaiPayload.tools = tools
     
-    debug('OpenAI payload:', openaiPayload)
+    debug('OpenAI payload:', JSON.stringify(openaiPayload, null, 2))
 
     const headers: Record<string, string> = {
       'Content-Type': 'application/json'
@@ -214,63 +201,68 @@ app.post('/v1/messages', async (c) => {
       body: JSON.stringify(openaiPayload)
     })
 
+    // Add X-Dropped-Params header if any params were dropped
+    if (droppedParams.length > 0) {
+      c.header('X-Dropped-Params', droppedParams.join(', '))
+    }
+
     if (!openaiResponse.ok) {
       const errorDetails = await openaiResponse.text()
       console.error(`OpenAI API error (${openaiResponse.status}):`, errorDetails)
       console.error('Failed request payload:', JSON.stringify(openaiPayload, null, 2))
+      console.error('Dropped parameters:', droppedParams)
       return c.json({ error: errorDetails }, openaiResponse.status as any)
     }
 
     // If stream is not enabled, process the complete response
     if (!openaiPayload.stream) {
       const data: any = await openaiResponse.json()
-      debug('OpenAI response:', data)
+      debug('OpenAI response:', JSON.stringify(data, null, 2))
       if (data.error) {
-        throw new Error(data.error.message)
+        console.error('OpenAI API returned error in response body:', data.error)
+        return c.json({ error: data.error.message || 'Unknown error' }, 500)
       }
 
+      // Create Claude response from OpenAI data
       const choice = data.choices[0]
       const openaiMessage = choice.message
-
-      // Map finish_reason to anthropic stop_reason
-      const stopReason = mapStopReason(choice.finish_reason)
-      const toolCalls = openaiMessage.tool_calls || []
-
-      // Create a message id
-      const messageId = data.id
-        ? data.id.replace('chatcmpl', 'msg')
-        : 'msg_' + Math.random().toString(36).substring(2, 26)
-
-      const anthropicResponse = {
-        content: [
-          {
-            text: openaiMessage.content,
-            type: 'text'
-          },
-          ...toolCalls.map((toolCall: any) => ({
+      
+      // Build content blocks
+      const content: any[] = []
+      if (openaiMessage.content) {
+        content.push({
+          type: 'text',
+          text: openaiMessage.content
+        })
+      }
+      
+      if (openaiMessage.tool_calls) {
+        for (const toolCall of openaiMessage.tool_calls) {
+          content.push({
             type: 'tool_use',
             id: toolCall.id,
             name: toolCall.function.name,
-            input: JSON.parse(toolCall.function.arguments),
-          })),
-        ],
-        id: messageId,
-        model: openaiPayload.model,
-        role: openaiMessage.role,
-        stop_reason: stopReason,
-        stop_sequence: null,
-        type: 'message',
-        usage: {
-          input_tokens: data.usage
-            ? data.usage.prompt_tokens
-            : messages.reduce((acc, msg) => acc + (msg.content?.split(' ').length || 0), 0),
-          output_tokens: data.usage
-            ? data.usage.completion_tokens
-            : openaiMessage.content.split(' ').length,
+            input: JSON.parse(toolCall.function.arguments)
+          })
         }
       }
-
-      return c.json(anthropicResponse)
+      
+      const claudeResponse = {
+        id: data.id ? data.id.replace('chatcmpl', 'msg') : 'msg_' + Math.random().toString(36).substring(2, 26),
+        type: 'message',
+        role: 'assistant',
+        model: openaiPayload.model,
+        content,
+        stop_reason: mapStopReason(choice.finish_reason),
+        stop_sequence: null,
+        usage: {
+          input_tokens: data.usage?.prompt_tokens || 0,
+          output_tokens: data.usage?.completion_tokens || 0
+        }
+      }
+      
+      debug('Claude response:', JSON.stringify(claudeResponse, null, 2))
+      return c.json(claudeResponse)
     }
 
     // Streaming response using Server-Sent Events
@@ -279,6 +271,7 @@ app.post('/v1/messages', async (c) => {
         const encoder = new TextEncoder()
 
         const sendSSE = (event: string, data: any) => {
+          debug('Sending SSE:', { event, data: JSON.stringify(data, null, 2) })
           const sseMessage = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`
           controller.enqueue(encoder.encode(sseMessage))
         }
