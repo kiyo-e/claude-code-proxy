@@ -2,6 +2,7 @@
   "name": "@kiyo-e/claude-code-proxy",
   "version": "0.1.4",
   "type": "module",
+  "license": "MIT",
   "repository": {
     "type": "git",
     "url": "https://github.com/kiyo-e/claude-code-proxy.git"
