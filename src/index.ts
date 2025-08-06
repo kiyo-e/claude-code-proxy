@@ -167,16 +167,10 @@ app.post('/v1/messages', async (c) => {
     }
     // Add tool_choice if present
     if (claudeRequest.tool_choice) {
-      if (claudeRequest.tool_choice.type === 'none') {
-        openaiPayload.tool_choice = 'none'
-      } else if (claudeRequest.tool_choice.type === 'auto') {
-        openaiPayload.tool_choice = 'auto'
-      } else if (claudeRequest.tool_choice.type === 'tool' && claudeRequest.tool_choice.name) {
-        openaiPayload.tool_choice = {
-          type: 'function',
-          function: { name: claudeRequest.tool_choice.name }
-        }
-      }
+      const { type, name } = claudeRequest.tool_choice
+      openaiPayload.tool_choice = 
+        type === 'tool' && name ? { type: 'function', function: { name } } :
+        type === 'none' || type === 'auto' ? type : undefined
     }
     
     if (tools.length > 0) openaiPayload.tools = tools
@@ -225,7 +219,8 @@ app.post('/v1/messages', async (c) => {
       const data: any = await openaiResponse.json()
       debug('OpenAI response:', JSON.stringify(data, null, 2))
       if (data.error) {
-        throw new Error(data.error.message)
+        console.error('OpenAI API returned error in response body:', data.error)
+        return c.json({ error: data.error.message || 'Unknown error' }, 500)
       }
 
       // Create Claude response from OpenAI data
