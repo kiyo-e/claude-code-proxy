@@ -59,6 +59,7 @@ Configure via `wrangler.toml` or environment:
 - `COMPLETION_MODEL` - Model for completion requests (default: openai/gpt-4.1)
 - `REASONING_MAX_TOKENS` - Max tokens for reasoning model (optional)
 - `COMPLETION_MAX_TOKENS` - Max tokens for completion model (optional)
+- `REASONING_EFFORT` - Reasoning effort level for reasoning model (optional, e.g., "low", "medium", "high")
 - `DEBUG` - Enable debug logging (default: false)
 - `PORT` - Server port for Node.js mode (default: 3000)
 

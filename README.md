@@ -58,6 +58,7 @@ docker run -d -p 3000:3000 \
   -e ANTHROPIC_PROXY_BASE_URL=https://openrouter.ai/api/v1 \
   -e REASONING_MODEL=deepseek/deepseek-r1-0528:free \
   -e COMPLETION_MODEL=deepseek/deepseek-r1-0528:free \
+  -e REASONING_EFFORT=high \
   ghcr.io/kiyo-e/claude-code-proxy:latest
 
 # Use with Claude Code
@@ -75,6 +76,7 @@ REASONING_MODEL=deepseek/deepseek-r1-0528:free
 COMPLETION_MODEL=deepseek/deepseek-r1-0528:free
 REASONING_MAX_TOKENS=4096
 COMPLETION_MAX_TOKENS=2048
+REASONING_EFFORT=high
 DEBUG=false
 EOF
 
@@ -190,6 +192,7 @@ npm publish
 - `COMPLETION_MODEL` - Model for completion requests (default: openai/gpt-4.1)
 - `REASONING_MAX_TOKENS` - Max tokens for reasoning model (optional)
 - `COMPLETION_MAX_TOKENS` - Max tokens for completion model (optional)
+- `REASONING_EFFORT` - Reasoning effort level for reasoning model (optional, e.g., "low", "medium", "high")
 - `DEBUG` - Enable debug logging (default: false)
 - `PORT` - Server port for CLI mode (default: 3000)
 
@@ -205,6 +208,7 @@ npx wrangler secret put ANTHROPIC_PROXY_BASE_URL
 # Set regular environment variables
 npx wrangler env put REASONING_MODEL "deepseek/deepseek-r1-0528:free"
 npx wrangler env put COMPLETION_MODEL "deepseek/deepseek-r1-0528:free"
+npx wrangler env put REASONING_EFFORT "high"
 npx wrangler env put DEBUG "false"
 ```
 
@@ -214,6 +218,7 @@ Alternatively, configure via `wrangler.toml`:
 [env.production.vars]
 REASONING_MODEL = "deepseek/deepseek-r1-0528:free"
 COMPLETION_MODEL = "deepseek/deepseek-r1-0528:free"
+REASONING_EFFORT = "high"
 DEBUG = "false"
 ```
 

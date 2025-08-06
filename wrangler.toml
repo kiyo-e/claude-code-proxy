@@ -7,3 +7,4 @@ compatibility_flags = ["nodejs_compat"]
 # DEBUG = "true"
 # REASONING_MODEL = "deepseek/deepseek-r1-0528:free"
 # COMPLETION_MODEL = "deepseek/deepseek-r1-0528:free"
+# REASONING_EFFORT = "high"
