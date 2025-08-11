@@ -47,10 +47,13 @@ Options:
 
 Environment Variables:
   PORT                      Server port (default: 3000)
-  claude-code-proxy_API_KEY Bearer token for upstream API
+  CLAUDE_CODE_PROXY_API_KEY Bearer token for upstream API authentication
   ANTHROPIC_PROXY_BASE_URL  Upstream API URL (default: https://models.github.ai/inference)
   REASONING_MODEL           Model for reasoning requests (default: openai/gpt-4.1)
   COMPLETION_MODEL          Model for completion requests (default: openai/gpt-4.1)
+  REASONING_MAX_TOKENS      Max tokens override for reasoning model
+  COMPLETION_MAX_TOKENS     Max tokens override for completion model
+  REASONING_EFFORT          Reasoning effort (low|medium|high)
   DEBUG                     Enable debug logging (default: false)
 
 Examples:
