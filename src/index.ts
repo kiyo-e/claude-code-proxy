@@ -1,5 +1,6 @@
 import { Hono } from 'hono'
 import { env } from 'hono/adapter'
+import { cors } from 'hono/cors'
 import { transformOpenAIToClaude, removeUriFormat } from './transform'
 
 const app = new Hono<{
@@ -15,6 +16,8 @@ const app = new Hono<{
   }
 }>()
 
+// Add CORS middleware
+app.use('*', cors())
 
 const defaultModel = 'openai/gpt-4.1'
 
@@ -22,6 +25,11 @@ const defaultModel = 'openai/gpt-4.1'
 app.get('/', (c) => {
   const { ANTHROPIC_PROXY_BASE_URL, REASONING_MODEL, COMPLETION_MODEL, REASONING_MAX_TOKENS, COMPLETION_MAX_TOKENS, REASONING_EFFORT } = env(c)
 
+  // Set headers to prevent caching issues
+  c.header('Cache-Control', 'no-cache, no-store, must-revalidate')
+  c.header('Pragma', 'no-cache')
+  c.header('Expires', '0')
+  
   return c.json({
     status: 'ok',
     message: 'Claude Code Proxy is running',
