@@ -20,7 +20,10 @@ const DROP_KEYS = [
   'service_tier',
   'parallel_tool_calls',
   'functions',
-  'function_call'
+  'function_call',
+  'developer',  // o3 developer messages
+  'strict',  // o3 strict mode for tools
+  'reasoning_effort'  // o3 reasoning effort parameter
 ]
 
 interface DroppedParams {
@@ -75,39 +78,103 @@ export function mapTools(req: any): void {
     })))
   
   // Convert to Claude tool format
-  req.tools = openAITools.map((t: any) => ({
-    name: t.function?.name ?? t.name,
-    description: t.function?.description ?? t.description,
-    input_schema: removeUriFormat(t.function?.parameters ?? t.input_schema)
-  }))
+  req.tools = openAITools.map((t: any) => {
+    const tool: any = {
+      name: t.function?.name ?? t.name,
+      description: t.function?.description ?? t.description,
+      input_schema: removeUriFormat(t.function?.parameters ?? t.input_schema)
+    }
+    
+    // Handle o3 strict mode
+    if (t.function?.strict === true || t.strict === true) {
+      // Claude doesn't have a direct equivalent to strict mode,
+      // but we ensure the schema is properly formatted
+      if (tool.input_schema) {
+        tool.input_schema.additionalProperties = false
+      }
+    }
+    
+    return tool
+  })
   
   // Clean up original fields
   delete req.functions
 }
 
 /**
- * Map OpenAI function_call to Claude tool_choice
+ * Map OpenAI function_call/tool_choice to Claude tool_choice
  */
 export function mapToolChoice(req: any): void {
-  if (!req.function_call) return
+  // Handle both function_call and tool_choice (o3 uses tool_choice)
+  const toolChoice = req.tool_choice || req.function_call
   
-  const fc = req.function_call
+  if (!toolChoice) return
   
   // Convert to Claude tool_choice format
-  if (typeof fc === 'string') {
-    // Handle string values: 'auto', 'none'
-    req.tool_choice = {
-      type: fc === 'none' ? 'none' : 'auto'
+  if (typeof toolChoice === 'string') {
+    // Handle string values: 'auto', 'none', 'required'
+    if (toolChoice === 'none') {
+      req.tool_choice = { type: 'none' }
+    } else if (toolChoice === 'required') {
+      req.tool_choice = { type: 'any' }
+    } else {
+      req.tool_choice = { type: 'auto' }
     }
-  } else if (fc && typeof fc === 'object' && fc.name) {
-    // Handle specific function call
-    req.tool_choice = {
-      type: 'tool',
-      name: fc.name
+  } else if (toolChoice && typeof toolChoice === 'object') {
+    if (toolChoice.type === 'function' && toolChoice.function?.name) {
+      // o3 format: {type: 'function', function: {name: 'tool_name'}}
+      req.tool_choice = {
+        type: 'tool',
+        name: toolChoice.function.name
+      }
+    } else if (toolChoice.name) {
+      // Legacy format: {name: 'tool_name'}
+      req.tool_choice = {
+        type: 'tool',
+        name: toolChoice.name
+      }
     }
   }
   
   delete req.function_call
+}
+
+/**
+ * Extract text content from various message content formats
+ */
+function extractTextContent(content: any): string {
+  if (typeof content === 'string') {
+    return content
+  }
+  
+  if (Array.isArray(content)) {
+    // Handle array of content blocks
+    const textParts: string[] = []
+    for (const block of content) {
+      if (typeof block === 'string') {
+        textParts.push(block)
+      } else if (block && typeof block === 'object') {
+        if (block.type === 'text' && block.text) {
+          textParts.push(block.text)
+        } else if (block.content) {
+          textParts.push(extractTextContent(block.content))
+        }
+      }
+    }
+    return textParts.join('\n')
+  }
+  
+  if (content && typeof content === 'object') {
+    // Handle object content
+    if (content.text) {
+      return content.text
+    } else if (content.content) {
+      return extractTextContent(content.content)
+    }
+  }
+  
+  // Fallback to JSON stringify for debugging
+  return JSON.stringify(content)
 }
 
 /**
@@ -120,9 +187,17 @@ export function transformMessages(req: any): void {
   let systemMessages: string[] = []
   
   for (const msg of req.messages) {
+    // Handle developer messages (o3 specific) - treat as system messages
+    if (msg.role === 'developer') {
+      const content = extractTextContent(msg.content)
+      if (content) systemMessages.push(content)
+      continue
+    }
+    
     // Extract system messages
     if (msg.role === 'system') {
-      systemMessages.push(msg.content)
+      const content = extractTextContent(msg.content)
+      if (content) systemMessages.push(content)
       continue
     }
     
@@ -265,89 +340,53 @@ export function removeUriFormat(schema: any): any {
 /**
  * Main transformation function from OpenAI to Claude format
  */
-export function transformOpenAIToClaude(openAIRequest: any): { claudeRequest: any, droppedParams: string[] } {
-  // Deep clone to avoid mutating original
-  const req = JSON.parse(JSON.stringify(openAIRequest))
-  
-  // Apply transformations in order
-  const dropped = sanitizeRoot(req)
-  mapTools(req)
-  mapToolChoice(req)
-  transformMessages(req)
-  
+export function transformOpenAIToClaude(claudeRequestInput: any): { claudeRequest: any, droppedParams: string[], isO3Model?: boolean } {
+  const req = JSON.parse(JSON.stringify(claudeRequestInput))
+  const isO3Model = typeof req.model === 'string' && (req.model.includes('o3') || req.model.includes('o1'))
+
+  if (Array.isArray(req.system)) {
+    // Extract text content from each system message item
+    req.system = req.system
+      .map((item: any) => {
+        if (typeof item === 'string') {
+          return item
+        } else if (item && typeof item === 'object') {
+          // Handle content blocks
+          if (item.type === 'text' && item.text) {
+            return item.text
+          } else if (item.type === 'text' && item.content) {
+            return item.content
+          } else if (item.text) {
+            return item.text
+          } else if (item.content) {
+            return typeof item.content === 'string' ? item.content : JSON.stringify(item.content)
+          }
+        }
+        // Fallback
+        return JSON.stringify(item)
+      })
+      .filter((text: string) => text && text.trim() !== '')
+      .join('\n\n')
+  }
+
+  if (!Array.isArray(req.messages)) {
+    if (req.messages == null) req.messages = []
+    else req.messages = [req.messages]
+  }
+
+  if (!Array.isArray(req.tools)) req.tools = []
+
+  for (const t of req.tools) {
+    if (t && t.input_schema) {
+      t.input_schema = removeUriFormat(t.input_schema)
+    }
+  }
+
+  const dropped: string[] = []
+
   return {
     claudeRequest: req,
-    droppedParams: dropped.keys
+    droppedParams: dropped,
+    isO3Model
   }
-}
-
-/**
- * Transform Claude response back to OpenAI format
- */
-export function transformClaudeToOpenAI(claudeResponse: any, model: string): any {
-  // Handle non-streaming response
-  const openAIResponse: any = {
-    id: claudeResponse.id || `chatcmpl-${Math.random().toString(36).substring(2, 15)}`,
-    object: 'chat.completion',
-    created: Math.floor(Date.now() / 1000),
-    model: model,
-    choices: [],
-    usage: {
-      prompt_tokens: claudeResponse.usage?.input_tokens || 0,
-      completion_tokens: claudeResponse.usage?.output_tokens || 0,
-      total_tokens: (claudeResponse.usage?.input_tokens || 0) + (claudeResponse.usage?.output_tokens || 0)
-    }
-  }
-  
-  // Build the message from Claude content blocks
-  const message: any = {
-    role: 'assistant',
-    content: null
-  }
-  
-  const textParts: string[] = []
-  const toolCalls: any[] = []
-  
-  if (Array.isArray(claudeResponse.content)) {
-    for (const block of claudeResponse.content) {
-      if (block.type === 'text') {
-        textParts.push(block.text)
-      } else if (block.type === 'tool_use') {
-        toolCalls.push({
-          id: block.id,
-          type: 'function',
-          function: {
-            name: block.name,
-            arguments: JSON.stringify(block.input)
-          }
-        })
-      }
-    }
-  } else if (typeof claudeResponse.content === 'string') {
-    textParts.push(claudeResponse.content)
-  }
-  
-  // Set content and tool_calls
-  message.content = textParts.join('')
-  if (toolCalls.length > 0) {
-    message.tool_calls = toolCalls
-  }
-  
-  // Map stop_reason to finish_reason
-  let finishReason = 'stop'
-  if (claudeResponse.stop_reason === 'tool_use') {
-    finishReason = 'tool_calls'
-  } else if (claudeResponse.stop_reason === 'max_tokens') {
-    finishReason = 'length'
-  } else if (claudeResponse.stop_reason === 'end_turn') {
-    finishReason = 'stop'
-  }
-  
-  openAIResponse.choices.push({
-    index: 0,
-    message,
-    finish_reason: finishReason
-  })
-  
-  return openAIResponse
 }

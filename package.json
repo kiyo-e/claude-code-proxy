@@ -17,7 +17,7 @@
   "scripts": {
     "bin": "./bin",
     "dev": "wrangler dev src/index.ts",
-    "start": "bun run --hot src/index.ts",
+    "start": "bun run --hot src/server.ts",
     "deploy": "wrangler deploy --minify src/index.ts",
     "build": "bun build ./src/server.ts --outfile=./bin --target=node --format=esm --banner='#!/usr/bin/env node'",
     "prepack": "bun run build && chmod +x ./bin"
@@ -32,6 +32,6 @@
   },
   "dependencies": {
     "@hono/node-server": "^1.14.3",
-    "hono": "^4.7.11"
+    "hono": "^4.9.0"
   }
 }

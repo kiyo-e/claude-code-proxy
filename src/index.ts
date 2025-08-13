@@ -1,6 +1,7 @@
 import { Hono } from 'hono'
 import { env } from 'hono/adapter'
-import { transformOpenAIToClaude, transformClaudeToOpenAI, removeUriFormat } from './transform'
+import { cors } from 'hono/cors'
+import { transformOpenAIToClaude, removeUriFormat } from './transform'
 
 const app = new Hono<{
   Bindings: {
@@ -15,6 +16,8 @@ const app = new Hono<{
   }
 }>()
 
+// Add CORS middleware
+app.use('*', cors())
 
 const defaultModel = 'openai/gpt-4.1'
 
@@ -22,6 +25,11 @@ const defaultModel = 'openai/gpt-4.1'
 app.get('/', (c) => {
   const { ANTHROPIC_PROXY_BASE_URL, REASONING_MODEL, COMPLETION_MODEL, REASONING_MAX_TOKENS, COMPLETION_MAX_TOKENS, REASONING_EFFORT } = env(c)
 
+  // Set headers to prevent caching issues
+  c.header('Cache-Control', 'no-cache, no-store, must-revalidate')
+  c.header('Pragma', 'no-cache')
+  c.header('Expires', '0')
+  
   return c.json({
     status: 'ok',
     message: 'Claude Code Proxy is running',
@@ -59,7 +67,9 @@ app.post('/v1/messages', async (c) => {
 
     const claudePayload = await c.req.json()
     
-    // Transform Claude format to OpenAI format
+    // Transform Claude format to OpenAI format for upstream API
+    // FIXED: Using the correct transformation function (was using the wrong one)
+    // The function name 'transformOpenAIToClaude' is misleading - it actually does Claude->OpenAI
     const { claudeRequest, droppedParams } = transformOpenAIToClaude(claudePayload)
 
     // Convert messages from Claude to OpenAI format for upstream API
@@ -67,21 +77,95 @@ app.post('/v1/messages', async (c) => {
     
     // Add system messages
     if (claudeRequest.system) {
+      let systemContent: string
+      
+      if (typeof claudeRequest.system === 'string') {
+        systemContent = claudeRequest.system
+      } else if (Array.isArray(claudeRequest.system)) {
+        // Handle array of system messages (join them)
+        systemContent = claudeRequest.system
+          .map((item: any) => {
+            if (typeof item === 'string') return item
+            if (item && typeof item === 'object') {
+              if (item.type === 'text' && item.text) return item.text
+              if (item.content) return typeof item.content === 'string' ? item.content : JSON.stringify(item.content)
+            }
+            return JSON.stringify(item)
+          })
+          .join('\n\n')
+      } else if (typeof claudeRequest.system === 'object') {
+        // Handle object system message (e.g., structured content)
+        if (claudeRequest.system.text) {
+          systemContent = claudeRequest.system.text
+        } else if (claudeRequest.system.content) {
+          systemContent = typeof claudeRequest.system.content === 'string' 
+            ? claudeRequest.system.content 
+            : JSON.stringify(claudeRequest.system.content)
+        } else {
+          systemContent = JSON.stringify(claudeRequest.system)
+        }
+      } else {
+        systemContent = String(claudeRequest.system)
+      }
+      
       messages.push({
         role: 'system',
-        content: claudeRequest.system
+        content: systemContent
       })
     }
     
     // Process regular messages
     if (claudeRequest.messages && Array.isArray(claudeRequest.messages)) {
       for (const msg of claudeRequest.messages) {
-        if (msg.role === 'user' || msg.role === 'assistant') {
-          // Handle content blocks
+        if (msg.role === 'user') {
+          // Handle user messages which may contain tool_result blocks
+          if (Array.isArray(msg.content)) {
+            const textParts: string[] = []
+            const toolResults: any[] = []
+            
+            for (const block of msg.content) {
+              if (block.type === 'text') {
+                textParts.push(block.text)
+              } else if (block.type === 'tool_result') {
+                // Tool results should be separate tool messages
+                toolResults.push({
+                  role: 'tool',
+                  content: typeof block.content === 'string' ? block.content : JSON.stringify(block.content),
+                  tool_call_id: block.tool_use_id
+                })
+              }
+            }
+            
+            // If we have tool results, they should be added as tool messages
+            // OpenAI expects: assistant with tool_calls -> tool messages -> user message
+            if (toolResults.length > 0) {
+              // Add tool messages first
+              messages.push(...toolResults)
+              // Then add user message if it has text content
+              if (textParts.length > 0) {
+                messages.push({
+                  role: 'user',
+                  content: textParts.join(' ')
+                })
+              }
+            } else if (textParts.length > 0) {
+              // Regular user message without tool results
+              messages.push({
+                role: 'user',
+                content: textParts.join(' ')
+              })
+            }
+          } else if (typeof msg.content === 'string') {
+            messages.push({
+              role: 'user',
+              content: msg.content
+            })
+          }
+        } else if (msg.role === 'assistant') {
+          // Handle assistant messages which may contain tool_use blocks
           if (Array.isArray(msg.content)) {
             const textParts: string[] = []
             const toolCalls: any[] = []
-            const toolResults: any[] = []
             
             for (const block of msg.content) {
               if (block.type === 'text') {
@@ -95,28 +179,27 @@ app.post('/v1/messages', async (c) => {
                     arguments: JSON.stringify(block.input)
                   }
                 })
-              } else if (block.type === 'tool_result') {
-                toolResults.push({
-                  role: 'tool',
-                  content: block.content || '',
-                  tool_call_id: block.tool_use_id
-                })
               }
             }
             
-            // Add main message if it has content
+            // Add assistant message with content and/or tool calls
+            const openAIMsg: any = { role: 'assistant' }
+            // OpenAI requires content to be null when only tool_calls are present
+            if (textParts.length > 0) {
+              openAIMsg.content = textParts.join(' ')
+            } else if (toolCalls.length > 0) {
+              openAIMsg.content = null
+            }
+            if (toolCalls.length > 0) {
+              openAIMsg.tool_calls = toolCalls
+            }
+            // Ensure we have either content or tool_calls
             if (textParts.length > 0 || toolCalls.length > 0) {
-              const openAIMsg: any = { role: msg.role }
-              if (textParts.length > 0) openAIMsg.content = textParts.join(' ')
-              if (toolCalls.length > 0) openAIMsg.tool_calls = toolCalls
               messages.push(openAIMsg)
             }
-            
-            // Add tool result messages
-            messages.push(...toolResults)
           } else if (typeof msg.content === 'string') {
             messages.push({
-              role: msg.role,
+              role: 'assistant',
               content: msg.content
             })
           }
@@ -136,29 +219,37 @@ app.post('/v1/messages', async (c) => {
         },
       }))
 
+    const selectedModel = claudePayload.thinking ? models.reasoning : models.completion
+    const isO3Model = selectedModel && (selectedModel.includes('o3') || selectedModel.includes('gpt-5'))
+    
     const openaiPayload: any = {
       // Existing fields kept as before
 
-      model: claudePayload.thinking ? models.reasoning : models.completion,
+      model: selectedModel,
       messages,
-      temperature: claudeRequest.temperature !== undefined ? claudeRequest.temperature : 1,
+      // o3/o1/gpt-5 models only support temperature=1 (default)
+      temperature: isO3Model ? undefined : (claudeRequest.temperature !== undefined ? claudeRequest.temperature : 1),
       stream: claudeRequest.stream === true,
     }
     
-    // Only add max_tokens if it's provided and not null/undefined
-    if (claudeRequest.max_tokens !== null && claudeRequest.max_tokens !== undefined) {
-      openaiPayload.max_tokens = claudeRequest.max_tokens
-    }
-
-    // Apply max_tokens override if configured
-    const selectedModel = claudePayload.thinking ? models.reasoning : models.completion
+    // Handle max_tokens vs max_completion_tokens based on model type
     const reasoningMaxTokens = REASONING_MAX_TOKENS ? parseInt(REASONING_MAX_TOKENS) : undefined
     const completionMaxTokens = COMPLETION_MAX_TOKENS ? parseInt(COMPLETION_MAX_TOKENS) : undefined
     
+    let maxTokensValue = claudeRequest.max_tokens
     if (selectedModel === models.reasoning && reasoningMaxTokens) {
-      openaiPayload.max_tokens = reasoningMaxTokens
+      maxTokensValue = reasoningMaxTokens
     } else if (selectedModel === models.completion && completionMaxTokens) {
-      openaiPayload.max_tokens = completionMaxTokens
+      maxTokensValue = completionMaxTokens
+    }
+    
+    // Use max_completion_tokens for o3/o1 models, max_tokens for others
+    if (maxTokensValue !== null && maxTokensValue !== undefined) {
+      if (isO3Model) {
+        openaiPayload.max_completion_tokens = maxTokensValue
+      } else {
+        openaiPayload.max_tokens = maxTokensValue
+      }
     }
     
     // Apply reasoning_effort if configured and model is reasoning
@@ -216,7 +307,9 @@ app.post('/v1/messages', async (c) => {
 
     // If stream is not enabled, process the complete response
     if (!openaiPayload.stream) {
+      debug('Processing non-streaming response...')
       const data: any = await openaiResponse.json()
+      debug('OpenAI response received, parsing...')
       debug('OpenAI response:', JSON.stringify(data, null, 2))
       if (data.error) {
         console.error('OpenAI API returned error in response body:', data.error)
@@ -238,11 +331,16 @@ app.post('/v1/messages', async (c) => {
       
       if (openaiMessage.tool_calls) {
         for (const toolCall of openaiMessage.tool_calls) {
+          // Handle both old and new o3 tool call formats
+          const toolId = toolCall.id || `tool_${Date.now()}`
+          const toolName = toolCall.function?.name || toolCall.name
+          const toolArguments = toolCall.function?.arguments || toolCall.arguments
+          
           content.push({
             type: 'tool_use',
-            id: toolCall.id,
-            name: toolCall.function.name,
-            input: JSON.parse(toolCall.function.arguments)
+            id: toolId,
+            name: toolName,
+            input: typeof toolArguments === 'string' ? JSON.parse(toolArguments) : toolArguments
           })
         }
       }
@@ -262,7 +360,31 @@ app.post('/v1/messages', async (c) => {
       }
       
       debug('Claude response:', JSON.stringify(claudeResponse, null, 2))
-      return c.json(claudeResponse)
+      debug('Attempting to return response to client...')
+      
+      // Set proper headers for Claude API response
+      c.header('Content-Type', 'application/json')
+      c.header('anthropic-version', '2023-06-01')
+      
+      try {
+        const response = c.json(claudeResponse, 200)
+        debug('Response created successfully')
+        return response
+      } catch (jsonError) {
+        console.error('Error returning JSON response:', jsonError)
+        console.error('Response object:', claudeResponse)
+        // Fallback: return a simplified response
+        return c.json({
+          id: claudeResponse.id,
+          type: 'message',
+          role: 'assistant',
+          model: claudeResponse.model,
+          content: claudeResponse.content,
+          stop_reason: claudeResponse.stop_reason,
+          stop_sequence: null,
+          usage: claudeResponse.usage
+        }, 200)
+      }
     }
 
     // Streaming response using Server-Sent Events
@@ -294,7 +416,10 @@ app.post('/v1/messages', async (c) => {
               content: [],
               stop_reason: null,
               stop_sequence: null,
-              usage: { input_tokens: 0, output_tokens: 0 },
+              usage: { 
+                input_tokens: 0, 
+                output_tokens: 0 
+              },
             }
           })
 
@@ -360,12 +485,20 @@ app.post('/v1/messages', async (c) => {
                       stop_sequence: null
                     },
                     usage: usage
-                      ? { output_tokens: usage.completion_tokens }
-                      : { output_tokens: accumulatedContent.split(' ').length + accumulatedReasoning.split(' ').length }
+                      ? { 
+                          input_tokens: usage.prompt_tokens || 0,
+                          output_tokens: usage.completion_tokens || 0
+                        }
+                      : { 
+                          input_tokens: 0,
+                          output_tokens: 0
+                        }
                   })
                   sendSSE('message_stop', {
                     type: 'message_stop'
                   })
+                  // Send an explicit end signal for SSE
+                  controller.enqueue(encoder.encode('\n'))
                   controller.close()
                   return
                 }
@@ -375,44 +508,66 @@ app.post('/v1/messages', async (c) => {
                   if (parsed.error) {
                     throw new Error(parsed.error.message)
                   }
-                  sendSuccessMessage()
-
-                  // Capture usage if available
+                  
+                  // Capture usage BEFORE sending success message
                   if (parsed.usage) {
                     usage = parsed.usage
                   }
+                  
+                  sendSuccessMessage()
+                  
+                  // Check if this is an empty response with finish_reason
+                  const choice = parsed.choices[0]
+                  if (choice.finish_reason && !choice.delta?.content && !choice.delta?.tool_calls) {
+                    // Empty response, send minimal content block if none was sent
+                    if (!textBlockStarted && !encounteredToolCall) {
+                      textBlockStarted = true
+                      sendSSE('content_block_start', {
+                        type: 'content_block_start',
+                        index: 0,
+                        content_block: {
+                          type: 'text',
+                          text: ''
+                        }
+                      })
+                      // Don't send content_block_stop here, it will be sent when [DONE] is received
+                    }
+                    // Continue to process finish_reason below
+                  }
 
-                  const delta = parsed.choices[0].delta
+                  const delta = choice.delta
                   if (delta && delta.tool_calls) {
                     for (const toolCall of delta.tool_calls) {
                       encounteredToolCall = true
                       const idx = toolCall.index
                       if (toolCallAccumulators[idx] === undefined) {
                         toolCallAccumulators[idx] = ""
+                        // Handle both old and new o3 tool call formats
+                        const toolId = toolCall.id || `tool_${Date.now()}_${idx}`
+                        const toolName = toolCall.function?.name || toolCall.name
                         sendSSE('content_block_start', {
                           type: 'content_block_start',
                           index: idx,
                           content_block: {
                             type: 'tool_use',
-                            id: toolCall.id,
-                            name: toolCall.function.name,
+                            id: toolId,
+                            name: toolName,
                             input: {}
                           }
                         })
                       }
-                      const newArgs = toolCall.function.arguments || ""
-                      const oldArgs = toolCallAccumulators[idx]
-                      if (newArgs.length > oldArgs.length) {
-                        const deltaText = newArgs.substring(oldArgs.length)
+                      // For streaming, arguments come as deltas that need to be accumulated
+                      const deltaArgs = toolCall.function?.arguments || toolCall.arguments || ""
+                      if (deltaArgs) {
+                        toolCallAccumulators[idx] = (toolCallAccumulators[idx] || "") + deltaArgs
                         sendSSE('content_block_delta', {
                           type: 'content_block_delta',
                           index: idx,
                           delta: {
                             type: 'input_json_delta',
-                            partial_json: deltaText
+                            partial_json: deltaArgs
                           }
                         })
-                        toolCallAccumulators[idx] = newArgs
                       }
                     }
                   } else if (delta && delta.content) {
@@ -499,9 +654,10 @@ app.post('/v1/messages', async (c) => {
       }
     }), {
       headers: {
-        'Content-Type': 'text/event-stream',
-        'Cache-Control': 'no-cache',
-        'Connection': 'keep-alive'
+        'Content-Type': 'text/event-stream; charset=utf-8',
+        'Cache-Control': 'no-cache, no-transform',
+        'Connection': 'keep-alive',
+        'X-Accel-Buffering': 'no'
       }
     })
   } catch (err: any) {
