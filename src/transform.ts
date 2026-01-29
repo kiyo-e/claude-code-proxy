@@ -388,5 +388,62 @@ export function transformOpenAIToClaude(claudeRequestInput: any): { claudeReques
     claudeRequest: req,
     droppedParams: dropped,
     isO3Model
+      }
+}
+
+/**
+ * Transform OpenAI response back to Claude format, preserving thought_signature for Gemini 3.0
+ */
+export function transformOpenAIResponseToClaude(openAIResponse: any, thoughtSignatures?: Map<string, string>): any {
+  if (!openAIResponse.choices || !Array.isArray(openAIResponse.choices)) {
+    return openAIResponse
+  }
+
+  // Process each choice
+  for (const choice of openAIResponse.choices) {
+    if (!choice.message) continue
+
+    const message = choice.message
+
+    // Handle tool_calls with thought_signature preservation
+    if (message.tool_calls && Array.isArray(message.tool_calls)) {
+      for (const toolCall of message.tool_calls) {
+        // Store thought_signature if present (Gemini 3.0 specific)
+        if (toolCall.function && thoughtSignatures) {
+          const thoughtSig = (toolCall.function as any).thought_signature || 
+                             (toolCall as any).thought_signature
+          if (thoughtSig) {
+            thoughtSignatures.set(toolCall.id, thoughtSig)
+          }
+        }
+      }
+    }
+  }
+
+  return openAIResponse
+}
+
+/**
+ * Add thought_signature to tool results for Gemini 3.0 compatibility
+ */
+export function addThoughtSignaturesToToolResults(messages: any[], thoughtSignatures: Map<string, string>): void {
+  if (!messages || !Array.isArray(messages)) return
+
+  for (const message of messages) {
+    if (message.role === 'tool' && message.tool_call_id && thoughtSignatures.has(message.tool_call_id)) {
+      // Add thought_signature to the tool result
+      (message as any).thought_signature = thoughtSignatures.get(message.tool_call_id)
+    }
+
+    // Also handle content array format (Claude format)
+    if (message.content && Array.isArray(message.content)) {
+      for (const content of message.content) {
+        if (content.type === 'tool_result' && content.tool_use_id && thoughtSignatures.has(content.tool_use_id)) {
+          content.thought_signature = thoughtSignatures.get(content.tool_use_id)
+        }
+      }
+    }
+  }
+
   }
 }
